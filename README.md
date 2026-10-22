@@ -146,7 +146,9 @@ drivers\SurfaceLaptop7\...
 powershell -ExecutionPolicy Bypass -File .\scripts\New-InstallMedia.ps1 -UsbDisk 1 -Force
 ```
 
-(`-UsbDisk` 번호는 `Get-Disk`로 확인. 시스템 디스크는 거부합니다.)
+(`-UsbDisk` 번호는 `Get-Disk`로 확인. 시스템 디스크는 거부합니다.
+WinPE 파티션이 들어 있는 스틱은 기본적으로 **거부**하며, 정말 지우려면
+`-AllowWinPERemoval`을 함께 줘야 합니다. 2파티션 구성에서는 이 옵션을 쓰지 마세요.)
 
 ### USB 하나로 둘 다 쓰기 (2파티션 구성)
 

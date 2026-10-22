@@ -36,7 +36,8 @@ param(
     [string] $Destination,
     [switch] $SkipDrivers,
     [int]    $UsbDisk = -1,
-    [switch] $Force
+    [switch] $Force,
+    [switch] $AllowWinPERemoval
 )
 
 $ErrorActionPreference = 'Stop'
@@ -125,6 +126,24 @@ if ($UsbDisk -ge 0) {
 
     Write-Host ''
     Write-Host ("WARNING: disk {0} ({1}, {2:N0} GB) will be erased." -f $UsbDisk, $disk.FriendlyName, ($disk.Size / 1GB)) -ForegroundColor Yellow
+
+    # This clean wipes the whole disk, including a WinPE partition created by
+    # Build-WinPE.ps1.  Say so explicitly before doing it.
+    $existing = @(Get-Partition -DiskNumber $UsbDisk -ErrorAction SilentlyContinue |
+        ForEach-Object {
+            $label = try { (Get-Volume -Partition $_ -ErrorAction Stop).FileSystemLabel } catch { '' }
+            "{0}: {1:N1} GB {2} {3}" -f $_.PartitionNumber, ($_.Size / 1GB), $_.Type, $label
+        })
+    if ($existing) {
+        Write-Host '  partitions on this disk:' -ForegroundColor Yellow
+        $existing | ForEach-Object { Write-Host "    $_" -ForegroundColor Yellow }
+        if ($existing -match 'WINPE') {
+            if (-not $AllowWinPERemoval) {
+                throw ("Disk $UsbDisk carries a WinPE partition. Erasing it would leave you without a bootable WinPE stick. To add the install media next to WinPE, create an NTFS partition with New-Partition -UseMaximumSize (see README section 2). Pass -AllowWinPERemoval if you really want to wipe it.")
+            }
+            Write-Host '  A WinPE partition was found and -AllowWinPERemoval was given: it will be deleted.' -ForegroundColor Red
+        }
+    }
 
     $dp = Join-Path $env:TEMP 'winpe-installmedia-diskpart.txt'
     @(
