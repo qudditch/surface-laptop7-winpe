@@ -148,11 +148,37 @@ powershell -ExecutionPolicy Bypass -File .\scripts\New-InstallMedia.ps1 -UsbDisk
 
 (`-UsbDisk` 번호는 `Get-Disk`로 확인. 시스템 디스크는 거부합니다.)
 
-> **USB 하나로 둘 다 쓰고 싶다면**: WinPE USB를 만들면 2 GB EFI 파티션만 쓰고
-> 나머지는 할당되지 않은 채로 남습니다. 남은 공간에 NTFS 파티션을 만들어
-> `out\InstallMedia`를 복사하면 됩니다. 단, Windows/WinPE는 이동식 디스크의
-> **첫 번째 파티션만 자동으로 문자를 할당**하므로, WinPE에서 그 파티션이 안 보이면
-> `diskpart` → `list volume` → `select volume N` → `assign` 으로 문자를 주면 됩니다.
+### USB 하나로 둘 다 쓰기 (2파티션 구성)
+
+WinPE USB를 만들면 2 GB EFI 파티션만 쓰고 나머지는 할당되지 않은 채로 남습니다.
+그 공간에 NTFS 파티션을 만들어 `out\InstallMedia`를 넣으면 스틱 하나로 끝납니다.
+
+```powershell
+# 관리자 PowerShell (대상 USB가 지워지지는 않음 - 빈 공간에 파티션만 추가)
+$p = New-Partition -DiskNumber 1 -UseMaximumSize -AssignDriveLetter
+Format-Volume -DriveLetter $p.DriveLetter -FileSystem NTFS -NewFileSystemLabel 'WININSTALL' -Confirm:$false
+robocopy .\out\InstallMedia "$($p.DriveLetter):\" /E /J
+```
+
+레이아웃:
+
+| 파티션 | 크기 | 형식 | 레이블 | 내용 |
+|---|---|---|---|---|
+| 1 | 2 GB | FAT32 (EFI System) | `WINPE` | WinPE 부팅 파일 |
+| 2 | 나머지 | NTFS | `WININSTALL` | `install.esd` + 설치 스크립트 + 드라이버 |
+
+> **WinPE에서 두 번째 파티션이 안 보일 때** — 이동식 디스크는 첫 번째 파티션에만
+> 자동으로 드라이브 문자를 주는 경우가 있습니다. 그때는:
+>
+> ```bat
+> diskpart
+> list volume            rem "WININSTALL" 볼륨 번호 확인
+> select volume N
+> assign letter=D
+> exit
+> ```
+>
+> FAT32 파티션은 UEFI가 직접 읽으므로 문자를 줄 필요가 없습니다.
 
 ### install.esd 교체 (유동성)
 
@@ -174,7 +200,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\New-InstallMedia.ps1 -UsbDisk
 1. Surface를 완전히 종료합니다.
 2. **Vol Down 키를 누른 채로 전원 버튼을 눌렀다 떼면** USB 부팅 메뉴로 들어갑니다.
    (Vol Up + 전원은 UEFI 설정. UEFI에서 `Boot configuration` → USB를 맨 위로 올려도 됩니다.)
-3. 두 USB( WinPE + 설치 )를 연결하고 WinPE로 부팅합니다.
+3. USB를 연결하고 WinPE로 부팅합니다.
+   (WinPE + 설치 미디어를 한 스틱에 넣은 2파티션 구성이면 그 스틱 하나만 꽂으면 됩니다.
+   두 개를 쓴다면 둘 다 연결하세요.)
    Secure Boot는 켜 둔 상태로 두어도 됩니다(모두 Microsoft 서명 부팅 파일).
    만약 펌웨어가 2011 UEFI CA를 신뢰하지 않아 부팅이 거부되면
    `Build-WinPE.ps1 -UseExBootManager`로 다시 빌드해 보세요
