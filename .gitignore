@@ -1,0 +1,21 @@
+# Windows install image (about 5.6 GB) - bring your own install.esd
+install.esd
+*.esd
+*.wim
+*.swm
+
+# Build output (ISO, staged USB media, logs, DISM work folders)
+out/
+*.iso
+
+# Surface Laptop 7 driver package (Microsoft licensed; get it from the
+# Surface update catalog / MSI and unpack it into drivers\)
+drivers/
+
+# Local scratch
+.scratch/
+
+# Editor / OS noise
+Thumbs.db
+desktop.ini
+.vs/

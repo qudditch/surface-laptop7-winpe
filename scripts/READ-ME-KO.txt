@@ -1,0 +1,33 @@
+Surface Laptop 7 - Windows 11 26H2 clean install media
+=====================================================
+
+이 USB(NTFS)는 WinPE에서 사용합니다. 부팅은 WinPE USB로 하세요.
+
+1) WinPE 명령 프롬프트에서 이 USB의 드라이브 문자를 확인
+   (보통 D: 또는 E:, `diskpart` -> `list volume`)
+
+2) 내장 디스크가 disk 0 인지 확인
+   diskpart
+   list disk
+   exit
+
+3) 파티션 생성 (disk 0 전체가 지워집니다)
+   diskpart /s <USB문자>:\CreatePartitions.txt
+
+4) 이미지 적용 (인덱스를 물어봅니다)
+   <USB문자>:\ApplyImage.bat
+
+   옵션:
+   <USB문자>:\ApplyImage.bat <USB문자>:\install.esd 1 /drivers
+   -> 드라이버 패키지를 오프라인 이미지에도 주입
+
+5) 종료
+   wpeutil shutdown
+
+6) USB를 뽑고 정상 부팅 -> OOBE 시작
+
+참고
+- install.esd / install.wim / install.swm 을 이 폴더에 넣으면 자동 인식합니다.
+  다른 ESD로 교체해도 WinPE를 다시 만들 필요가 없습니다.
+- 설치 후 필요하면 관리자 PowerShell에서:
+    powershell -ExecutionPolicy Bypass -File <USB문자>:\Install-Drivers.ps1 -RunMsi

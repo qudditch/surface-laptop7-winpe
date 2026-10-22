@@ -1,0 +1,89 @@
+# ============================================================================
+#  WinPE driver manifest  (one driver-package folder per line)
+#  Paths are relative to the Surface driver root, by default:
+#      drivers\SurfaceLaptop7\SurfaceUpdate
+#
+#  Everything listed here is injected into the WinPE boot image (boot.wim)
+#  so that the built-in keyboard / touchpad / touchscreen and the internal
+#  NVMe disk are usable while PE is running.
+#
+#  "#" starts a comment.  Lines are ignored, blanks are ignored.
+#  You can add extra folders (e.g. a future Surface package) without
+#  touching the PowerShell script.
+# ============================================================================
+
+# --- Surface input / HID / firmware --------------------------------------
+hidmini                      # Surface HID Mini  (ACPI\MSHW0096 - built-in keyboard)
+surfacehidfriendlynames      # friendly names for the HID touchpad/touchscreen
+surfaceserialhubdriver       # Surface Serial Hub  (SSH) - transport for the keyboard
+surfacesam                   # Surface Accessory Manager
+surfaceintegrationdriver     # Surface Integration driver (MSHW0465)
+surfacepowerstate            # power state driver used by the input stack
+surfacepowermeter
+surfacesmf13in               # Surface System Management Framework
+surfacesmf15in
+smfclient
+ihvcpusmfclient
+systemmanagementframework
+hotplug                      # Surface HotPlug
+button                       # power / volume buttons
+thermalpolicy
+timealarmacpifilter
+TpmN
+surfaceuefi
+surfaceuefistpm
+digitizerwotextnpackage      # touch digitizer extension (Include=input.inf, present in PE)
+
+# --- Qualcomm SoC platform (I2C / SPI / GPIO / PMIC / power) -------------
+acpiplatformextension        # ACPI platform extension - required by Surface HID devices
+qcgpio8380                   # GPIO controller
+qcpmicgpio8380               # PMIC GPIO
+qci2c8380                    # I2C controller  (touchscreen, keyboard)
+qcspi8380                    # SPI controller  (precision touchpad)
+qcslimbus8380                # Slimbus (audio/accessory bus)
+qcpmic8380
+qcpmicapps8380
+qcpmicext8380
+qcpmicglink8380
+qcspmi8380
+qcuart8380
+qcsp8380
+qciommu
+qciommuext8380
+qcsmmu8380
+qcsubsys8380
+qcsubsysextcdsp8380
+qcsubsysextspss8380
+qcsubsysthermalmgr
+qcsyscache8380
+qcsocpartition
+qcsocservicekmdf
+qctree
+qctreeextqcom8380
+qcscm
+qcrpen
+qcpil
+qcpilext8380
+qcpilfilterext
+qcsecapp
+qcdpps
+qcpepwd8380
+qckmbam8380
+qcabd
+qceva8380
+qcevaext8380
+qccdi8380
+qcglink8380
+qcipcrouter8380
+qcipcc8380
+qcppx8380
+spiextrom8380
+qcpdsr
+
+# --- USB (so USB keyboards/mice and the install stick keep working) ------
+qcusb4bus8380
+qcusb4filter8380
+qcxhcifilter8380
+qcusbcucsi8380
+qcursext
+ucmucsihidclient

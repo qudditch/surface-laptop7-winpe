@@ -1,0 +1,51 @@
+rem ===========================================================================
+rem  Surface Laptop 7 - clean UEFI / GPT layout
+rem
+rem  WARNING: DISK 0 IS ERASED COMPLETELY.
+rem  In WinPE the internal NVMe is normally disk 0 and the USB stick is
+rem  disk 1.  Check with "diskpart /s list.txt" (list disk / list volume)
+rem  before running this file.
+rem
+rem  Partition letters used by ApplyImage.bat:
+rem      T:  Windows RE tools   (1024 MB - 26H2 winre.wim is ~783 MB)
+rem      S:  EFI system         (260 MB, FAT32)
+rem      W:  Windows            (rest of the disk)
+rem      R:  Recovery image     (15000 MB, optional image copy)
+rem ===========================================================================
+
+select disk 0
+clean
+convert gpt
+
+rem --- 1) Windows Recovery Environment ------------------------------------
+create partition primary size=1024
+format quick fs=ntfs label="Windows RE tools"
+set id="de94bba4-06d1-4d40-a16a-bfd50179d6ac"
+gpt attributes=0x8000000000000001
+assign letter=T
+
+rem --- 2) EFI system partition --------------------------------------------
+create partition efi size=260
+format quick fs=fat32 label="System"
+assign letter=S
+
+rem --- 3) Microsoft reserved partition -------------------------------------
+create partition msr size=128
+
+rem --- 4) Windows ----------------------------------------------------------
+rem  Format first, then shrink: diskpart can only shrink a formatted volume.
+rem  The space released here is used by the "Recovery image" partition.
+create partition primary
+format quick fs=ntfs label="Windows"
+assign letter=W
+shrink minimum=15000
+
+rem --- 5) Recovery image partition -----------------------------------------
+create partition primary
+format quick fs=ntfs label="Recovery image"
+set id="de94bba4-06d1-4d40-a16a-bfd50179d6ac"
+gpt attributes=0x8000000000000001
+assign letter=R
+
+list volume
+exit
