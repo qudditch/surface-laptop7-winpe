@@ -13,7 +13,12 @@
 # ============================================================================
 
 # --- Surface input / HID / firmware --------------------------------------
-hidmini                      # Surface HID Mini  (ACPI\MSHW0096 - built-in keyboard)
+# Surface Laptop 7 (Snapdragon) needs the *Windows PE* build of the Surface
+# HID Mini driver (from SurfaceHidMini_WinPE.zip), not the Windows 11 build
+# that ships in the MSI's "hidmini" folder.  Do not list "hidmini" here:
+# if both are in boot.wim, PnP picks the newer Windows build and the
+# keyboard stays dead.  Folder maps to the zip's SurfaceHidMini_WinPE_ARM.
+surfacehidminiwinpearm       # Surface HID Mini, WinPE build (ACPI\MSHW0096 - built-in keyboard)
 surfacehidfriendlynames      # friendly names for the HID touchpad/touchscreen
 surfaceserialhubdriver       # Surface Serial Hub  (SSH) - transport for the keyboard
 surfacesam                   # Surface Accessory Manager
@@ -27,6 +32,7 @@ ihvcpusmfclient
 systemmanagementframework
 hotplug                      # Surface HotPlug
 button                       # power / volume buttons
+service                      # Surface Integration service (ACPI\MSHW0094)
 thermalpolicy
 timealarmacpifilter
 TpmN
@@ -36,10 +42,13 @@ digitizerwotextnpackage      # touch digitizer extension (Include=input.inf, pre
 
 # --- Qualcomm SoC platform (I2C / SPI / GPIO / PMIC / power) -------------
 acpiplatformextension        # ACPI platform extension - required by Surface HID devices
+qcgpi8380                    # GPIO interrupt controller (GPI) - interrupt path for SSH/I2C/SPI
 qcgpio8380                   # GPIO controller
 qcpmicgpio8380               # PMIC GPIO
 qci2c8380                    # I2C controller  (touchscreen, keyboard)
 qcspi8380                    # SPI controller  (precision touchpad)
+qcfgbcl8380                  # Fabric / bus clock control
+qcfgbclext8380               # Fabric extension
 qcslimbus8380                # Slimbus (audio/accessory bus)
 qcpmic8380
 qcpmicapps8380

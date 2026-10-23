@@ -28,6 +28,10 @@ WinPE\
 
 * Windows ADK + **Windows PE add-on** (ARM64 WinPE가 포함된 버전).
   이 PC에는 `C:\Program Files (x86)\Windows Kits\10\...` (WinPE 26100)이 설치되어 있습니다.
+* Microsoft의 **`SurfaceHidMini_WinPE.zip`** — 내장 키보드용 HID 미니 드라이버의
+  WinPE 빌드. 압축을 풀어 `SurfaceHidMini_WinPE_ARM` 폴더를
+  `drivers\SurfaceLaptop7\SurfaceUpdate\surfacehidminiwinpearm\`에 넣습니다
+  ([내장 키보드용 Surface HID Mini](#내장-키보드용-surface-hid-mini-winpe-빌드) 참고).
 * 관리자 권한 PowerShell.
 * USB 2개 (가이드와 동일):
   * **WinPE USB** — FAT32, 1 GB 이상
@@ -68,6 +72,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\Build-WinPE.ps1
    추출한 `mshidkmdf`는 `out\cache`에 캐시되어 다음 빌드부터는 생략됩니다.
 4. `scripts\winpe-drivers.txt`에 나열된 Surface/Qualcomm 드라이버를 DISM으로 주입
    (키보드·터치패드·터치스크린·I2C/SPI/GPIO/PMIC/USB/SSH 스택)
+   — 내장 키보드 패키지는 드라이버 MSI의 `hidmini` 폴더가 아니라 **WinPE 전용
+   빌드**(`surfacehidminiwinpearm`)를 넣습니다. 아래
+   [내장 키보드용 Surface HID Mini](#내장-키보드용-surface-hid-mini-winpe-빌드) 참고.
 5. WinPE 스크래치 공간을 1024 MB로 설정 (6 GB ESD 적용 대비)
 6. `boot.wim` 커밋 후 `out\WinPE_SurfaceLaptop7_arm64.iso` 생성
 
@@ -78,6 +85,36 @@ out\WinPE_SurfaceLaptop7_arm64.iso
 out\logs\Build-WinPE_<시각>.log
 out\logs\dism-add-driver.log
 ```
+
+### 내장 키보드용 Surface HID Mini (WinPE 빌드)
+
+Surface Laptop 7(Snapdragon)의 내장 키보드는 `SurfaceHidMiniDriver`(HID 미니포트)
+드라이버로 동작합니다. 이 드라이버는 **두 가지 빌드**가 있고 서로 바꿔 쓸 수 없습니다.
+
+| 빌드 | 출처 | DriverVer | WinPE |
+|---|---|---|---|
+| Windows 11 빌드 | 드라이버 MSI의 `hidmini` 폴더 | 3.98.18.0 | ✗ |
+| **Windows PE 빌드** | Microsoft `SurfaceHidMini_WinPE.zip` → `SurfaceHidMini_WinPE_ARM` | 3.97.22.0 | ✓ |
+
+Windows PE 빌드만 `[SurfaceHidMini.Inst.NT.Services]`에서 `mshidkmdf`를 장치의
+연관 서비스로 등록합니다(`AddService = mshidkmdf, 0x000001fa, ...`). 이 줄이 없으면
+WinPE에서는 키보드가 전혀 뜨지 않습니다. Windows 11 빌드는 Windows 이미지용이라
+WinPE에서 동작하지 않습니다.
+
+준비 방법:
+
+1. Microsoft의 Surface Laptop 7 드라이버/펌웨어 페이지에서
+   `SurfaceHidMini_WinPE.zip`을 받습니다.
+2. 압축을 풀어 `SurfaceHidMini_WinPE_ARM` 폴더의 파일 3개
+   (`SurfaceHidMiniDriver.inf` / `.sys` / `.cat`)를
+   `drivers\SurfaceLaptop7\SurfaceUpdate\surfacehidminiwinpearm\`에 넣습니다.
+3. `winpe-drivers.txt`에 `hidmini`가 **없고** `surfacehidminiwinpearm`이
+   있는지 확인합니다(기본값이 그렇습니다).
+
+> 두 빌드가 한 이미지에 같이 들어가면 PnP는 DriverVer가 더 높은 Windows 빌드를
+> 고르므로 키보드는 그대로 죽습니다. 그래서 빌드 스크립트는 `-DriverProfile All`에서도
+> `hidmini` 폴더를 건너뛰고, `Verify-WinPE.ps1`은 `surfacehidmini*` 패키지가 정확히
+> 하나인지, 그리고 그 INF가 PE 빌드인지까지 검사합니다.
 
 ### WinPE USB 만들기
 
@@ -101,8 +138,12 @@ powershell -ExecutionPolicy Bypass -File .\scripts\Verify-WinPE.ps1
 ```
 
 `boot.wim`을 읽기 전용으로 마운트해서 `mshidkmdf`, `surfacehidmini`,
-`surfaceserialhubdriver`, Qualcomm I2C/SPI/GPIO 패키지가 실제로 들어갔는지
-OK/MISSING으로 출력합니다. ISO를 굽기 전에 한 번 돌려 보세요.
+`surfaceserialhubdriver`, Qualcomm I2C/SPI/GPIO(GPI 포함) 패키지가 실제로
+들어갔는지 OK/MISSING으로 출력합니다. 여기에 더해 내장 키보드 패키지가
+**Windows PE 빌드**인지까지 확인합니다 — 패키지 폴더 이름은 두 빌드가 같기 때문에,
+INF의 `[SurfaceHidMini.Inst.NT.Services]`에 `AddService = mshidkmdf` 줄이 있는지,
+`surfacehidmini*` 패키지가 정확히 하나인지, `DriverVer`가 무엇인지 검사합니다.
+ISO를 굽기 전에 한 번 돌려 보세요.
 
 ### 드라이버 목록 바꾸기
 
@@ -277,8 +318,10 @@ powershell -ExecutionPolicy Bypass -File E:\Install-Drivers.ps1 -RunMsi
     추가된 드라이버 목록, HID/키보드/마우스 장치 상태, 디스크 목록이 출력됩니다.
   * `X:\Windows\System32\wpeinit.log`에서 드라이버 로드 오류를 확인할 수 있습니다.
   * 빌드 로그(`out\logs\dism-add-driver.log`)에서 필수 패키지 주입 실패가 없는지 확인하세요.
-    `hidmini`, `surfaceserialhubdriver`, `qci2c8380`, `qcspi8380`, `qcgpio8380`,
-    `qcpmicgpio8380`은 실패 시 빌드가 중단되도록 해 두었습니다.
+    `surfacehidminiwinpearm`, `surfaceserialhubdriver`, `qci2c8380`, `qcspi8380`,
+    `qcgpi8380`, `qcgpio8380`, `qcpmicgpio8380`은 실패 시 빌드가 중단되도록 해 두었습니다.
+  * `Verify-WinPE.ps1`의 "Surface HID Mini variant" 항목이 `FAIL`이면 키보드 패키지가
+    Windows 11 빌드(`hidmini`)입니다. `SurfaceHidMini_WinPE.zip`으로 바꿔 다시 빌드하세요.
 * **`W:`가 없다고 나올 때** — `CreatePartitions.txt`를 먼저 실행했는지, USB 문자를
   잘못 지정하지 않았는지 확인하세요.
 * **`reagentc` 경고** — WinRE 등록만 실패한 경우이며 설치는 정상입니다.
@@ -292,6 +335,7 @@ powershell -ExecutionPolicy Bypass -File E:\Install-Drivers.ps1 -RunMsi
 | 항목 | 가이드 | 이 키트 | 이유 |
 |---|---|---|---|
 | WinPE 드라이버 | 없음 (USB 마우스/이더넷 의존) | Surface/Qualcomm 입력·플랫폼 드라이버 주입 | WinPE에서 내장 키보드/터치패드 사용 |
+| 내장 키보드 드라이버 | MSI의 `hidmini` | WinPE 전용 빌드 `surfacehidminiwinpearm` | Windows 11 빌드는 WinPE에서 키보드가 뜨지 않음 |
 | WinRE 파티션 | 600 MB | **1024 MB** | 26H2 `winre.wim`이 약 783 MB라 600 MB에는 복사 실패 |
 | Windows 파티션 축소 | `shrink` 후 `format` | `format` 후 `shrink` | diskpart는 포맷된 볼륨만 축소 가능 |
 | 이미지 형식 | `install.wim` | `install.esd` / `.wim` / `.swm` 자동 | 사용자가 만든 ESD 지원 |
@@ -320,6 +364,14 @@ powershell -ExecutionPolicy Bypass -File E:\Install-Drivers.ps1 -RunMsi
   `Needs=mshidkmdf.NT.Services`를 쓰고, 서비스 바이너리는
   `%10%\System32\Drivers\mshidkmdf.sys`입니다. 그래서 `.inf`(해석용)와
   `.sys`(실행 파일)가 **둘 다** 이미지에 있어야 합니다.
+* 이 드라이버는 MSI의 Windows 11 빌드(3.98.18.0)와 Microsoft가 따로 배포하는
+  WinPE 빌드(3.97.22.0) 두 가지가 있고 하드웨어 ID가 같습니다. `[SurfaceHidMini.Inst.NT.Services]`
+  안에 `AddService = mshidkmdf, 0x000001fa`가 있는 것은 WinPE 빌드뿐이며,
+  그 줄이 WinPE에서 키보드가 실제로 뜨게 만드는 차이입니다.
+  두 빌드를 같이 넣으면 DriverVer가 높은 Windows 빌드가 선택됩니다.
+* `qcgpi8380`(GPIO 인터럽트 컨트롤러)은 `GPIOCLx0101` 클래스 확장에 의존하는
+  부팅 시작 드라이버로, SSH/I2C/SPI의 인터럽트 경로입니다. WinPE에는 자동으로
+  들어가지 않으므로 목록에 명시했습니다.
 
 ---
 
@@ -327,28 +379,35 @@ powershell -ExecutionPolicy Bypass -File E:\Install-Drivers.ps1 -RunMsi
 
 | 항목 | 값 |
 |---|---|
-| 드라이버 주입 | **70 / 70 성공** (실패 0) |
-| `boot.wim` | 342 MB |
-| `out\WinPE_SurfaceLaptop7_arm64.iso` | 374 MB |
-| DriverStore 패키지 수 | 291 |
+| 드라이버 주입 | **74 / 74 성공** (실패 0, 경고 0) |
+| `boot.wim` | 343 MB |
+| `out\WinPE_SurfaceLaptop7_arm64.iso` | 375 MB |
+| DriverStore 패키지 수 | 295 |
 | `out\InstallMedia` | 7.2 GB |
 
-`Verify-WinPE.ps1`로 최종 ISO를 검사한 출력:
+`Verify-WinPE.ps1`로 최종 ISO를 검사한 출력(요약):
 
 ```
   OK      Windows\INF\mshidkmdf.inf
   OK      Windows\System32\drivers\mshidkmdf.sys
+  OK      qcgpi8380                  GPIO interrupt controller (GPI)
   OK      qcgpio8380                 GPIO controller
   OK      qci2c8380                  I2C controller
   OK      qcpmicgpio8380             PMIC GPIO
   OK      qcspi8380                  SPI controller (touchpad)
-  OK      surfacehidmini             built-in keyboard
+  OK      surfacehidmini             built-in keyboard (variant checked below)
   OK      surfaceintegrationdriver   Surface integration
   OK      surfaceserialhubdriver     keyboard transport (SSH)
   OK      mshidkmdf                  HID KMDF package
-  total packages in driver store: 291
+  total packages in driver store: 295
+
+== Surface HID Mini variant (built-in keyboard) ==
+  package surfacehidminidriver.inf_arm64_044e5939d470c18b
+  DriverVer: 12/13/2023,3.97.22.0
+  OK      Windows PE build (mshidkmdf is an associated service)
 RESULT: OK - the built-in keyboard/touchpad stack is present.
 ```
 
-> 2025-05 이후 나온 Surface 드라이버 패키지(SurfaceUpdate 26.091.9400.0)를 기준으로
-> 한 결과입니다. 드라이버 패키지를 교체하면 `Verify-WinPE.ps1`을 다시 돌려 확인하세요.
+> 2025-05 이후 나온 Surface 드라이버 패키지(SurfaceUpdate 26.091.9400.0)와
+> `SurfaceHidMini_WinPE.zip`을 기준으로 한 결과입니다. 드라이버 패키지를 교체하면
+> `Verify-WinPE.ps1`을 다시 돌려 확인하세요.

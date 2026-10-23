@@ -17,6 +17,11 @@
     the boot image.  That makes SurfaceHidMiniDriver (the built-in keyboard)
     installable inside WinPE.
 
+    The built-in keyboard package itself must be the Windows PE build from
+    Microsoft's SurfaceHidMini_WinPE.zip (folder SurfaceHidMini_WinPE_ARM),
+    not the Windows 11 build in the driver MSI.  The manifest points at the
+    copy extracted under drivers\...\surfacehidminiwinpearm.
+
 .PARAMETER DriverProfile
     Manifest (default) = only the packages listed in winpe-drivers.txt.
     All                = every *.inf under the driver root (slower, bigger).
@@ -90,6 +95,12 @@ $BootWim       = Join-Path $WinPeWork 'media\sources\boot.wim'
 $CacheDir      = Join-Path $OutDir 'cache\mshidkmdf'
 $EsdMount      = Join-Path $WorkRoot 'esd_mount'
 
+# Surface Laptop 7 (Snapdragon) needs the Windows PE build of the Surface HID
+# Mini driver (Microsoft's separate SurfaceHidMini_WinPE.zip), not the Windows
+# 11 build inside the driver MSI's 'hidmini' folder.  The manifest must list
+# this folder and must NOT list 'hidmini'.
+$PeHidMiniEntry = 'surfacehidminiwinpearm'
+
 New-Item -ItemType Directory -Force -Path $OutDir, $LogDir, $WorkRoot | Out-Null
 
 $stamp   = Get-Date -Format 'yyyyMMdd-HHmmss'
@@ -99,7 +110,7 @@ Start-Transcript -Path $logFile -Force | Out-Null
 $script:Failures = @()
 $script:Injected = @()
 $mounted = $false
-$hidminiStageInf = $null
+$peHidMiniStageInf = $null
 
 function Write-Step([string] $Text) {
     Write-Host ''
@@ -321,14 +332,18 @@ try {
         # Stage a copy of the Surface HID Mini package next to mshidkmdf.* so
         # that "Include=mshidkmdf.inf" also resolves from the package folder
         # while DISM adds the driver.
-        $hidminiSrc = Join-Path $DriverRoot 'hidmini'
-        $hidminiStage = Join-Path $WorkRoot 'driverstage\hidmini'
-        if (Test-Path -LiteralPath $hidminiSrc) {
-            New-Item -ItemType Directory -Force -Path $hidminiStage | Out-Null
-            Copy-Item -Path (Join-Path $hidminiSrc '*') -Destination $hidminiStage -Force
-            Copy-Item -LiteralPath $cacheInf -Destination $hidminiStage -Force
-            Copy-Item -LiteralPath $cacheSys -Destination $hidminiStage -Force
-            $hidminiStageInf = Join-Path $hidminiStage 'SurfaceHidMiniDriver.inf'
+        $peHidMiniSrc = Join-Path $DriverRoot $PeHidMiniEntry
+        $peHidMiniStage = Join-Path $WorkRoot "driverstage\$PeHidMiniEntry"
+        if (Test-Path -LiteralPath $peHidMiniSrc) {
+            New-Item -ItemType Directory -Force -Path $peHidMiniStage | Out-Null
+            Copy-Item -Path (Join-Path $peHidMiniSrc '*') -Destination $peHidMiniStage -Force
+            Copy-Item -LiteralPath $cacheInf -Destination $peHidMiniStage -Force
+            Copy-Item -LiteralPath $cacheSys -Destination $peHidMiniStage -Force
+            $peHidMiniStageInf = Join-Path $peHidMiniStage 'SurfaceHidMiniDriver.inf'
+        }
+        else {
+            Write-Warning "Surface HID Mini WinPE package not found: $peHidMiniSrc"
+            Write-Warning 'Download SurfaceHidMini_WinPE.zip from Microsoft and extract SurfaceHidMini_WinPE_ARM here.'
         }
     }
 
@@ -338,11 +353,12 @@ try {
     Write-Step 'Step 4/7  Injecting drivers into WinPE'
 
     $required = @(
-        'hidmini',                  # built-in keyboard (SurfaceHidMiniDriver)
+        $PeHidMiniEntry,            # built-in keyboard (Surface HID Mini, WinPE build)
         'surfaceserialhubdriver',   # keyboard transport
         'surfaceintegrationdriver',
         'qci2c8380',
         'qcspi8380',                # touchpad
+        'qcgpi8380',                # GPIO interrupt controller
         'qcgpio8380',
         'qcpmicgpio8380'
     )
@@ -350,8 +366,17 @@ try {
     $toInject = @()   # list of @{ Name; Inf }
 
     if ($DriverProfile -eq 'All') {
-        Get-ChildItem -LiteralPath $DriverRoot -Recurse -Filter '*.inf' | ForEach-Object {
-            $toInject += [pscustomobject]@{ Name = (Split-Path $_.DirectoryName -Leaf); Inf = $_.FullName }
+        # 'hidmini' holds the Windows 11 build of Surface HID Mini.  Injecting it
+        # next to the WinPE build makes PnP prefer the newer Windows build and
+        # the built-in keyboard stays dead, so it is never added to WinPE.
+        Get-ChildItem -LiteralPath $DriverRoot -Recurse -Filter '*.inf' |
+            Where-Object { (Split-Path $_.DirectoryName -Leaf) -ne 'hidmini' } |
+            ForEach-Object {
+                $toInject += [pscustomobject]@{ Name = (Split-Path $_.DirectoryName -Leaf); Inf = $_.FullName }
+            }
+        if (Get-ChildItem -LiteralPath $DriverRoot -Recurse -Directory -Filter 'hidmini') {
+            Write-Warning "-DriverProfile All: skipped 'hidmini' (Windows 11 build of Surface HID Mini)."
+            Write-Warning 'Only surfacehidminiwinpearm (Windows PE build) may be injected.'
         }
     }
     else {
@@ -372,8 +397,8 @@ try {
             }
             foreach ($inf in $infs) {
                 $infPath = $inf.FullName
-                if ($entry -eq 'hidmini' -and $hidminiStageInf -and (Test-Path -LiteralPath $hidminiStageInf)) {
-                    $infPath = $hidminiStageInf
+                if ($entry -eq $PeHidMiniEntry -and $peHidMiniStageInf -and (Test-Path -LiteralPath $peHidMiniStageInf)) {
+                    $infPath = $peHidMiniStageInf
                 }
                 $toInject += [pscustomobject]@{ Name = $entry; Inf = $infPath }
             }
@@ -453,7 +478,20 @@ try {
     # ----------------------------------------------------------------------
     Write-Step 'Step 7/7  Creating the bootable ISO'
 
-    if (Test-Path -LiteralPath $OutputIso) { Remove-Item -LiteralPath $OutputIso -Force }
+    if (Test-Path -LiteralPath $OutputIso) {
+        # A mounted copy of the previous ISO (e.g. left over from a manual look at
+        # the image) holds a lock on the file and makes both the delete and
+        # oscdimg fail.  Unmount it first; ask the user to close anything else.
+        $mounted = Get-DiskImage -ImagePath $OutputIso -ErrorAction SilentlyContinue
+        if ($mounted -and $mounted.Attached) {
+            Write-Host 'Dismounting the previously mounted output ISO...'
+            Dismount-DiskImage -ImagePath $OutputIso -ErrorAction SilentlyContinue | Out-Null
+        }
+        try { Remove-Item -LiteralPath $OutputIso -Force -ErrorAction Stop }
+        catch {
+            throw "Cannot replace $OutputIso - it is still in use. Dismount the ISO or close whatever has it open, then re-run."
+        }
+    }
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $OutputIso) | Out-Null
 
     $bootexArg = ''
